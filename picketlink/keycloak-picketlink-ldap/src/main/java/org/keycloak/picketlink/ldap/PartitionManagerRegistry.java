@@ -10,6 +10,8 @@ import org.picketlink.idm.config.IdentityConfigurationBuilder;
 import org.picketlink.idm.config.LDAPMappingConfigurationBuilder;
 import org.picketlink.idm.config.LDAPStoreConfigurationBuilder;
 import org.picketlink.idm.internal.DefaultPartitionManager;
+import org.picketlink.idm.model.basic.Grant;
+import org.picketlink.idm.model.basic.Role;
 import org.picketlink.idm.model.basic.User;
 
 import java.util.HashMap;
@@ -78,11 +80,23 @@ public class PartitionManagerRegistry {
         if (ldapLoginNameMapping == null) {
             ldapLoginNameMapping = activeDirectory ? CN : UID;
         }
+        
+        String ldapGroupNameMapping = ldapConfig.get(LDAPConstants.GROUP_NAME_LDAP_ATTRIBUTE);
+        if (ldapGroupNameMapping == null) {
+        	ldapGroupNameMapping = activeDirectory ? CN : CN;
+        }
+        
+        String ldapMembershipMapping = ldapConfig.get(LDAPConstants.MEMBERSHIP_LDAP_ATTRIBUTE);
+        if (ldapGroupNameMapping == null) {
+        	ldapGroupNameMapping = activeDirectory ? MEMBER : MEMBER;
+        }
 
         String ldapFirstNameMapping = activeDirectory ?  "givenName" : CN;
         String createTimestampMapping = activeDirectory ? "whenCreated" : CREATE_TIMESTAMP;
         String modifyTimestampMapping = activeDirectory ? "whenChanged" : MODIFY_TIMESTAMP;
         String[] userObjectClasses = getUserObjectClasses(ldapConfig);
+        
+        String[] groupObjectClasses = getGroupObjectClasses(ldapConfig);
 
         boolean pagination = ldapConfig.containsKey(LDAPConstants.PAGINATION) ? Boolean.parseBoolean(ldapConfig.get(LDAPConstants.PAGINATION)) : false;
 
@@ -124,7 +138,20 @@ public class PartitionManagerRegistry {
             ldapUserMappingBuilder.bindingAttribute("fullName", CN);
             logger.infof("Using 'cn' attribute for DN of user and 'sAMAccountName' for username");
         }
+        
+        LDAPMappingConfigurationBuilder ldapRoleMappingBuilder = ldapStoreBuilder
+                .mapping(Role.class)
+                    .baseDN(ldapConfig.get(LDAPConstants.GROUP_DN_SUFFIX))
+                    .objectClasses(groupObjectClasses)
+                    .attribute("name", ldapGroupNameMapping, true)
+                    .readOnlyAttribute("createdDate", createTimestampMapping)
+                    .readOnlyAttribute("modifyDate", modifyTimestampMapping);
 
+        LDAPMappingConfigurationBuilder ldapRelationshipMappingBuilder = ldapStoreBuilder
+                .mapping(Grant.class)
+                	.forMapping(Role.class)
+                    .attribute("assignee", ldapMembershipMapping);
+        
         KeycloakEventBridge eventBridge = new KeycloakEventBridge(activeDirectory && "true".equals(ldapConfig.get(LDAPConstants.USER_ACCOUNT_CONTROLS_AFTER_PASSWORD_UPDATE)));
         return new DefaultPartitionManager(builder.buildAll(), eventBridge, null);
     }
@@ -148,6 +175,20 @@ public class PartitionManagerRegistry {
             userObjectClasses[i] = objectClasses[i].trim();
         }
         return userObjectClasses;
+    }
+    
+    private static String[] getGroupObjectClasses(Map<String,String> ldapConfig) {
+        String objClassesCfg = ldapConfig.get(LDAPConstants.GROUP_OBJECT_CLASSES);
+        String objClassesStr = (objClassesCfg != null && objClassesCfg.length() > 0) ? objClassesCfg.trim() : "groupOfNames";
+
+        String[] objectClasses = objClassesStr.split(",");
+
+        // Trim them
+        String[] groupObjectClasses = new String[objectClasses.length];
+        for (int i=0 ; i<objectClasses.length ; i++) {
+            groupObjectClasses[i] = objectClasses[i].trim();
+        }
+        return groupObjectClasses;
     }
 
     private class PartitionManagerContext {

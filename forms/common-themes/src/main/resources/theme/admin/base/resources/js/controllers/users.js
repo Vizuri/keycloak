@@ -478,7 +478,7 @@ module.controller('GenericUserFederationCtrl', function($scope, $location, Notif
 });
 
 
-module.controller('LDAPCtrl', function($scope, $location, Notifications, Dialog, realm, instance, UserFederationInstances, UserFederationSync, RealmLDAPConnectionTester) {
+module.controller('LDAPCtrl', function($scope, $location, Notifications, Dialog, realm, instance, UserFederationInstances, UserFederationSync, RealmLDAPConnectionTester, $route) {
     console.log('LDAPCtrl');
     var DEFAULT_BATCH_SIZE = "1000";
 
@@ -486,7 +486,7 @@ module.controller('LDAPCtrl', function($scope, $location, Notifications, Dialog,
 
     function initFederationSettings() {
         if ($scope.create) {
-            instance.providerName = "ldap";
+            instance.providerName = $route.current.providerName; //"ldap";
             instance.config = {};
             instance.priority = 0;
             $scope.syncRegistrations = false;

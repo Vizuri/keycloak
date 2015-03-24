@@ -144,7 +144,9 @@ public class RealmAdminResource {
      */
     @Path("roles")
     public RoleContainerResource getRoleContainerResource() {
-        return new RoleContainerResource(realm, auth, realm);
+    	RoleContainerResource roleContainerResource = new RoleContainerResource(realm, auth, realm);
+    	ResteasyProviderFactory.getInstance().injectProperties(roleContainerResource);
+        return roleContainerResource;
     }
 
     /**

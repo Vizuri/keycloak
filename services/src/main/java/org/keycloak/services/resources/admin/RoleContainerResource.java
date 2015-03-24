@@ -1,12 +1,18 @@
 package org.keycloak.services.resources.admin;
 
+import org.jboss.logging.Logger;
 import org.jboss.resteasy.annotations.cache.NoCache;
 import org.jboss.resteasy.spi.NotFoundException;
 import org.keycloak.models.ApplicationModel;
+import org.keycloak.models.ExtendedUserFederationProvider;
+import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ModelDuplicateException;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleContainerModel;
 import org.keycloak.models.RoleModel;
+import org.keycloak.models.UserFederationProvider;
+import org.keycloak.models.UserFederationProviderFactory;
+import org.keycloak.models.UserFederationProviderModel;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.services.resources.flows.Flows;
@@ -22,6 +28,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -31,9 +38,14 @@ import java.util.Set;
  * @version $Revision: 1 $
  */
 public class RoleContainerResource extends RoleResource {
+	private static final Logger logger = Logger.getLogger(RoleContainerResource.class);
+	
     private final RealmModel realm;
     private final RealmAuth auth;
     protected RoleContainerModel roleContainer;
+    
+    @Context
+    protected KeycloakSession session;
 
     public RoleContainerResource(RealmModel realm, RealmAuth auth, RoleContainerModel roleContainer) {
         super(realm);
@@ -75,10 +87,47 @@ public class RoleContainerResource extends RoleResource {
 
         try {
             RoleModel role = roleContainer.addRole(rep.getName());
+            
             role.setDescription(rep.getDescription());
+            
+            try {
+            
+            	for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
+            		UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+            		
+            		ExtendedUserFederationProvider fed = (ExtendedUserFederationProvider) factory.getInstance(session, federation);
+            		if (fed.synchronizeRegistrations()) {
+            			//TODO: implement role.setFederationLink.
+//                    	role.setFederationLink(federation.getId());
+            			fed.registerRole(realm, role);
+            		}
+            	}
+            	
+            	if (session.getTransaction().isActive()) {
+            		session.getTransaction().commit();
+                }
+            }catch (ModelDuplicateException mde) {
+            	if (session.getTransaction().isActive()) {
+                    session.getTransaction().setRollbackOnly();
+                }
+            	return Flows.errors().exists("Role with name " + rep.getName() + " already exists in user federation");
+        	}catch (ClassCastException cce) {
+            	logger.warn("Can not sync role to user federation: " + cce);
+            } catch (IllegalStateException ise) {
+        		logger.info("Safely ignore the exception because syncing to user federation is turned off in configuration: " + ise);
+        	}
+
             return Response.created(uriInfo.getAbsolutePathBuilder().path(role.getName()).build()).build();
         } catch (ModelDuplicateException e) {
-            return Flows.errors().exists("Role with name " + rep.getName() + " already exists");
+        	if (session.getTransaction().isActive()) {
+                session.getTransaction().setRollbackOnly();
+            }
+            return Flows.errors().exists("Role with name " + rep.getName() + " already exists in keycloak");
+        } catch (Exception e) {
+        	if (session.getTransaction().isActive()) {
+                session.getTransaction().setRollbackOnly();
+            }
+            return Flows.errors().exists("Role with name " + rep.getName() + " can not be added due to the following error: " + e.getCause().getMessage());
         }
     }
 
@@ -113,11 +162,38 @@ public class RoleContainerResource extends RoleResource {
     public void deleteRole(final @PathParam("role-name") String roleName) {
         auth.requireManage();
 
-        RoleModel role = roleContainer.getRole(roleName);
-        if (role == null) {
-            throw new NotFoundException("Could not find role: " + roleName);
+        try {
+        	RoleModel role = roleContainer.getRole(roleName);
+        	if (role == null) {
+        		throw new NotFoundException("Could not find role: " + roleName);
+        	}
+        	deleteRole(role);
+
+        	try {
+
+        		for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
+        			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+
+        			ExtendedUserFederationProvider fed = (ExtendedUserFederationProvider) factory.getInstance(session, federation);
+        			if (fed.synchronizeRegistrations()) {
+        				fed.deleteRole(realm, role);
+        			}
+        		}
+
+        		if (session.getTransaction().isActive()) {
+        			session.getTransaction().commit();
+        		}
+        	} catch (ClassCastException cce) {
+        		logger.warn("Can not sync role to user federation: " + cce);
+        	} catch (IllegalStateException ise) {
+        		logger.info("Safely ignore the exception because syncing to user federation is turned off in configuration: " + ise);
+        	}
+        } catch(Exception e) {
+        	logger.error("Failed to delete role " + roleName + ": " + e);
+        	if (session.getTransaction().isActive()) {
+        		session.getTransaction().setRollbackOnly();
+        	}
         }
-        deleteRole(role);
     }
 
     /**

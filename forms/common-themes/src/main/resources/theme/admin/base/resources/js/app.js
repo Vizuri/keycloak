@@ -807,7 +807,33 @@ module.config([ '$routeProvider', function($routeProvider) {
                     return {};
                 }
             },
+            controller : 'LDAPCtrl',
+            providerName : 'ldap'
+        })
+        .when('/realms/:realm/user-federation/providers/ldap-with-roles/:instance', {
+            templateUrl : 'partials/federated-ldap.html',
+            resolve : {
+                realm : function(RealmLoader) {
+                    return RealmLoader();
+                },
+                instance : function(UserFederationInstanceLoader) {
+                    return UserFederationInstanceLoader();
+                }
+            },
             controller : 'LDAPCtrl'
+        })
+        .when('/create/user-federation/:realm/providers/ldap-with-roles', {
+            templateUrl : 'partials/federated-ldap.html',
+            resolve : {
+                realm : function(RealmLoader) {
+                    return RealmLoader();
+                },
+                instance : function() {
+                    return {};
+                }
+            },
+            controller : 'LDAPCtrl',
+            providerName : 'ldap-with-roles'
         })
         .when('/create/user-federation/:realm/providers/:provider', {
             templateUrl : 'partials/federated-generic.html',

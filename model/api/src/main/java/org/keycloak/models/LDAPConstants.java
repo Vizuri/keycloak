@@ -19,6 +19,11 @@ public class LDAPConstants {
     public static final String USER_DN_SUFFIX = "userDnSuffix";
     public static final String BIND_DN = "bindDn";
     public static final String BIND_CREDENTIAL = "bindCredential";
+    
+    public static final String GROUP_DN_SUFFIX = "groupDnSuffix";
+    public static final String GROUP_NAME_LDAP_ATTRIBUTE = "groupNameLDAPAttribute";
+    public static final String GROUP_OBJECT_CLASSES = "groupObjectClasses";
+    public static final String MEMBERSHIP_LDAP_ATTRIBUTE = "membershipLDAPAttribute";
 
     public static final String CONNECTION_POOLING = "connectionPooling";
     public static final String PAGINATION = "pagination";

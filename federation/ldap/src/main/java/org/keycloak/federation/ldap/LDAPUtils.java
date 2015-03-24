@@ -1,19 +1,21 @@
 package org.keycloak.federation.ldap;
 
+import java.util.List;
+
 import org.keycloak.models.ModelDuplicateException;
 import org.picketlink.idm.IdentityManagementException;
 import org.picketlink.idm.IdentityManager;
 import org.picketlink.idm.PartitionManager;
+import org.picketlink.idm.RelationshipManager;
 import org.picketlink.idm.credential.Credentials;
 import org.picketlink.idm.credential.Password;
 import org.picketlink.idm.credential.UsernamePasswordCredentials;
 import org.picketlink.idm.model.Attribute;
 import org.picketlink.idm.model.basic.BasicModel;
+import org.picketlink.idm.model.basic.Role;
 import org.picketlink.idm.model.basic.User;
 import org.picketlink.idm.query.AttributeParameter;
 import org.picketlink.idm.query.QueryParameter;
-
-import java.util.List;
 
 /**
  * Allow to directly call some operations against Picketlink IDM PartitionManager (hence LDAP).
@@ -136,5 +138,96 @@ public class LDAPUtils {
         }
 
         return fullName;
+    }
+    
+    public static Role addRole(PartitionManager partitionManager, String name) {
+        IdentityManager identityManager = getIdentityManager(partitionManager);
+
+        if (BasicModel.getRole(identityManager, name) != null) {
+            throw new ModelDuplicateException("Role with same name already exists");
+        }
+
+        Role picketlinkRole = new Role(name);
+        picketlinkRole.setName(name);
+        identityManager.add(picketlinkRole);
+        return picketlinkRole;
+    }
+    
+    public static Role deleteRole(PartitionManager partitionManager, String name) {
+        IdentityManager identityManager = getIdentityManager(partitionManager);
+
+        Role picketlinkRole = BasicModel.getRole(identityManager, name);
+        
+        if (picketlinkRole == null) {
+            throw new IdentityManagementException("Role not found");
+        }
+
+        identityManager.remove(picketlinkRole);
+        return picketlinkRole;
+    }
+    
+    public static void grantRole(PartitionManager partitionManager, String username, String rolename) {
+        IdentityManager identityManager = getIdentityManager(partitionManager);
+        
+        Role picketlinkRole = BasicModel.getRole(identityManager, rolename);
+        if (picketlinkRole == null) {
+            throw new IdentityManagementException("Role not found");
+        }
+        
+        User picketlinkUser = BasicModel.getUser(identityManager, username);
+        if (picketlinkUser == null) {
+            throw new IdentityManagementException("User not found");
+        }
+        
+        System.out.println("picketlinkUser dn is: " + picketlinkUser.getAttribute("dn"));
+        
+        RelationshipManager relationshipManager = getRelationshipManager(partitionManager);
+        BasicModel.grantRole(relationshipManager, picketlinkUser, picketlinkRole);
+//        if (relationshipManager == null) {
+//            throw MESSAGES.nullArgument("RelationshipManager");
+//        }
+//
+//        if (picketlinkUser == null) {
+//            throw MESSAGES.nullArgument("IdentityType");
+//        }
+//
+//        if (!Account.class.isInstance(picketlinkUser) && !Group.class.isInstance(picketlinkUser)) {
+//            throw MESSAGES.unexpectedType(picketlinkUser.getClass());
+//        }
+//
+//        if (picketlinkRole == null) {
+//            throw MESSAGES.nullArgument("Role");
+//        }
+//
+//        relationshipManager.add(new Grant(picketlinkUser, picketlinkRole));
+//        
+//        RelationshipQuery<Grant> query = relationshipManager.createRelationshipQuery(Grant.class);
+//
+//        query.setParameter(Grant.ASSIGNEE, picketlinkUser);
+//        query.setParameter(GroupRole.ROLE, picketlinkRole);
+//
+//        if (query.getResultList().isEmpty())
+//	        System.out.println("picketlink basicmodel grant role has a bug.");
+    }
+    
+    public static void revokeRole(PartitionManager partitionManager, String username, String rolename) {
+        IdentityManager identityManager = getIdentityManager(partitionManager);
+        
+        Role picketlinkRole = BasicModel.getRole(identityManager, rolename);
+        if (picketlinkRole == null) {
+            throw new IdentityManagementException("Role not found");
+        }
+        
+        User picketlinkUser = BasicModel.getUser(identityManager, username);
+        if (picketlinkUser == null) {
+            throw new IdentityManagementException("User not found");
+        }
+        
+        RelationshipManager relationshipManager = getRelationshipManager(partitionManager);
+        BasicModel.revokeRole(relationshipManager, picketlinkUser, picketlinkRole);
+    }
+    
+    private static RelationshipManager getRelationshipManager(PartitionManager partitionManager) {
+        return partitionManager.createRelationshipManager();
     }
 }
