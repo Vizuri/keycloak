@@ -17,7 +17,7 @@
 
     <modules>
         <module>ldap</module>
-        <modele>ldap-with-roles</modele>
+        <module>ldap-with-roles</module>
     </modules>
 
 </project>
