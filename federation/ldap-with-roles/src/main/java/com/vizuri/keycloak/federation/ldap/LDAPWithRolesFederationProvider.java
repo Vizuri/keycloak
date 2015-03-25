@@ -116,13 +116,18 @@ public class LDAPWithRolesFederationProvider extends LDAPFederationProvider impl
                 }
             }
             
-            //deal with memberships            
+            // Deal with memberships            
             RelationshipQuery<Grant> grantQuery = relationshipManager.createRelationshipQuery(Grant.class);            
             grantQuery.setParameter(Grant.ASSIGNEE, picketlinkUser);
             List<Grant> grants = grantQuery.getResultList();
-             
+
+            // Remove all keycloak existing realm role mappings for this user
+            for (RoleModel role : currentUser.getRealmRoleMappings()) {
+            	currentUser.deleteRoleMapping(role);
+            }
+            
             for (Grant grant : grants) {
-            	// iterating over the user roles
+            	// Iterating over the user roles
             	Role picketlinkRole = grant.getRole();
             	if (picketlinkRole != null) {
             		RoleModel role = getRole(realm, picketlinkRole.getName());
@@ -139,8 +144,7 @@ public class LDAPWithRolesFederationProvider extends LDAPFederationProvider impl
 
 	@Override
 	public RoleModel registerRole(RealmModel realm, RoleModel role) {
-		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role registration is not supported by this ldap server");
-        if (!synchronizeRegistrations()) throw new IllegalStateException("Registration is not supported by this ldap server");
+		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role creation is not supported by this ldap server");
 
         try {
             Role picketlinkRole = LDAPUtils.addRole(this.partitionManager, role.getName());
@@ -165,7 +169,6 @@ public class LDAPWithRolesFederationProvider extends LDAPFederationProvider impl
 	@Override
 	public void grantRole(RealmModel realm, UserModel user, RoleModel role) {
 		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role mapping synchronization to ldap is not supported by this ldap server");
-        if (!synchronizeRegistrations()) throw new IllegalStateException("Synchronization to ldap is not supported by this ldap server");
 
         try {
             LDAPUtils.grantRole(this.partitionManager, user.getUsername(), role.getName());
@@ -177,7 +180,6 @@ public class LDAPWithRolesFederationProvider extends LDAPFederationProvider impl
 	@Override
 	public void revokeRole(RealmModel realm, UserModel user, RoleModel role) {
 		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role mapping synchronization to ldap is not supported by this ldap server");
-        if (!synchronizeRegistrations()) throw new IllegalStateException("Synchronization to ldap is not supported by this ldap server");
 
         try {
             LDAPUtils.revokeRole(this.partitionManager, user.getUsername(), role.getName());
@@ -188,8 +190,7 @@ public class LDAPWithRolesFederationProvider extends LDAPFederationProvider impl
 
 	@Override
 	public void deleteRole(RealmModel realm, RoleModel role) {
-		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role registration is not supported by this ldap server");
-        if (!synchronizeRegistrations()) throw new IllegalStateException("Registration is not supported by this ldap server");
+		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role deletion is not supported by this ldap server");
 
         try {
         	//TODO: check if this role is actually linked to user federation, and only delete it if it is.
