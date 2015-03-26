@@ -143,7 +143,7 @@ public class LDAPWithRolesFederationProvider extends LDAPFederationProvider impl
     }
 
 	@Override
-	public RoleModel registerRole(RealmModel realm, RoleModel role) {
+	public RoleModel createRole(RealmModel realm, RoleModel role) {
 		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role creation is not supported by this ldap server");
 
         try {
@@ -189,7 +189,7 @@ public class LDAPWithRolesFederationProvider extends LDAPFederationProvider impl
 	}
 
 	@Override
-	public void deleteRole(RealmModel realm, RoleModel role) {
+	public void removeRole(RealmModel realm, RoleModel role) {
 		if (editMode == EditMode.READ_ONLY || editMode == EditMode.UNSYNCED) throw new IllegalStateException("Role deletion is not supported by this ldap server");
 
         try {

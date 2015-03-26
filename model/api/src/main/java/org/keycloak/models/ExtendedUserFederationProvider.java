@@ -12,8 +12,8 @@ import org.keycloak.models.UserFederationProvider;
  *
  */
 public interface ExtendedUserFederationProvider extends UserFederationProvider {
-	RoleModel registerRole(RealmModel realm, RoleModel role);
-	void deleteRole(RealmModel realm, RoleModel role);
+	RoleModel createRole(RealmModel realm, RoleModel role);
+	void removeRole(RealmModel realm, RoleModel role);
 	void grantRole(RealmModel realm, UserModel user, RoleModel role);
 	void revokeRole(RealmModel realm, UserModel user, RoleModel role);
 }

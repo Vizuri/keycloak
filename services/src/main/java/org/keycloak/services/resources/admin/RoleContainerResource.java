@@ -99,7 +99,7 @@ public class RoleContainerResource extends RoleResource {
             		if (fed.synchronizeRegistrations()) {
             			//TODO: implement role.setFederationLink.
 //                    	role.setFederationLink(federation.getId());
-            			fed.registerRole(realm, role);
+            			fed.createRole(realm, role);
             		}
             	}
             	
@@ -176,7 +176,7 @@ public class RoleContainerResource extends RoleResource {
 
         			ExtendedUserFederationProvider fed = (ExtendedUserFederationProvider) factory.getInstance(session, federation);
         			if (fed.synchronizeRegistrations()) {
-        				fed.deleteRole(realm, role);
+        				fed.removeRole(realm, role);
         			}
         		}
 

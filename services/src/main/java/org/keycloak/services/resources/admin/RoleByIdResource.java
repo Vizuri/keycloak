@@ -111,7 +111,7 @@ public class RoleByIdResource extends RoleResource {
 
         			ExtendedUserFederationProvider fed = (ExtendedUserFederationProvider) factory.getInstance(session, federation);
         			if (fed.synchronizeRegistrations()) {
-        				fed.deleteRole(realm, role);
+        				fed.removeRole(realm, role);
         			}
         		}
 
