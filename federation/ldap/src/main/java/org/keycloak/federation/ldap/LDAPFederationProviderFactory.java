@@ -89,7 +89,8 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
         }
         
         // TODO: Remove all existing keycloak users, which have federation links, but are not in LDAP. Perhaps don't check users, which were just added or updated during this sync?
-    
+        
+        
         logger.info("syncAllUsers finished.");
     }
 
@@ -97,21 +98,58 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
     public void syncChangedUsers(KeycloakSessionFactory sessionFactory, String realmId, UserFederationProviderModel model, Date lastSync) {
         logger.infof("Sync changed users from LDAP to local store: realm: %s, federation provider: %s, current time: " + new Date() + ", last sync time: " + lastSync, realmId, model.getDisplayName());
 
+        logger.info("syncChangedUsers started.");
+        
         PartitionManagerProvider idmProvider = sessionFactory.create().getProvider(PartitionManagerProvider.class);
         PartitionManager partitionMgr = idmProvider.getPartitionManager(model);
+    	
+    	boolean supportRoles = Boolean.parseBoolean(model.getConfig().get(LDAPConstants.SUPPORT_ROLES));
+        
+    	if (supportRoles) {
 
-        // Sync newly created users
-        IdentityManager identityManager = partitionMgr.createIdentityManager();
-        IdentityQueryBuilder queryBuilder = identityManager.getQueryBuilder();
-        Condition condition = queryBuilder.greaterThanOrEqualTo(IdentityType.CREATED_DATE, lastSync);
-        IdentityQuery<User> userQuery = queryBuilder.createIdentityQuery(User.class).where(condition);
-        syncImpl(sessionFactory, userQuery, realmId, model);
+    		// Sync newly created roles
+    		IdentityManager identityManager = partitionMgr.createIdentityManager();
+    		IdentityQueryBuilder queryBuilder = identityManager.getQueryBuilder();
+    		Condition condition = queryBuilder.greaterThanOrEqualTo(IdentityType.CREATED_DATE, lastSync);
+    		IdentityQuery<Role> roleQuery = queryBuilder.createIdentityQuery(Role.class).where(condition);
+    		syncRolesImpl(sessionFactory, roleQuery, realmId, model);
 
-        // Sync updated users
-        queryBuilder = identityManager.getQueryBuilder();
-        condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
-        userQuery = queryBuilder.createIdentityQuery(User.class).where(condition);
-        syncImpl(sessionFactory, userQuery, realmId, model);
+    		// Sync updated roles
+    		queryBuilder = identityManager.getQueryBuilder();
+    		condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
+    		roleQuery = queryBuilder.createIdentityQuery(Role.class).where(condition);
+    		syncRolesImpl(sessionFactory, roleQuery, realmId, model);
+
+    		RelationshipManager rm = partitionMgr.createRelationshipManager();
+    		
+    		// Sync newly created users
+    		queryBuilder = identityManager.getQueryBuilder();
+    		condition = queryBuilder.greaterThanOrEqualTo(IdentityType.CREATED_DATE, lastSync);
+    		IdentityQuery<User> userQuery = queryBuilder.createIdentityQuery(User.class).where(condition);
+    		syncImpl(sessionFactory, userQuery, rm, realmId, model);
+
+    		// Sync updated users
+    		queryBuilder = identityManager.getQueryBuilder();
+    		condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
+    		userQuery = queryBuilder.createIdentityQuery(User.class).where(condition);
+    		syncImpl(sessionFactory, userQuery, rm, realmId, model);
+
+    	} else {
+    		// Sync newly created users
+    		IdentityManager identityManager = partitionMgr.createIdentityManager();
+    		IdentityQueryBuilder queryBuilder = identityManager.getQueryBuilder();
+    		Condition condition = queryBuilder.greaterThanOrEqualTo(IdentityType.CREATED_DATE, lastSync);
+    		IdentityQuery<User> userQuery = queryBuilder.createIdentityQuery(User.class).where(condition);
+    		syncImpl(sessionFactory, userQuery, realmId, model);
+
+    		// Sync updated users
+    		queryBuilder = identityManager.getQueryBuilder();
+    		condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
+    		userQuery = queryBuilder.createIdentityQuery(User.class).where(condition);
+    		syncImpl(sessionFactory, userQuery, realmId, model);
+    	}
+        
+        logger.info("syncChangedUsers finished.");
     }
 
     protected void syncImpl(KeycloakSessionFactory sessionFactory, IdentityQuery<User> userQuery, final String realmId, final UserFederationProviderModel fedModel) {
@@ -143,6 +181,41 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
                 @Override
                 public void run(KeycloakSession session) {
                     importPicketlinkUsers(session, realmId, fedModel, users);
+                }
+
+            });
+        }
+    }
+    
+    protected void syncImpl(KeycloakSessionFactory sessionFactory, IdentityQuery<User> userQuery, final RelationshipManager relationshipManager, final String realmId, final UserFederationProviderModel fedModel) {
+        boolean pagination = Boolean.parseBoolean(fedModel.getConfig().get(LDAPConstants.PAGINATION));
+
+        if (pagination) {
+            String pageSizeConfig = fedModel.getConfig().get(LDAPConstants.BATCH_SIZE_FOR_SYNC);
+            int pageSize = pageSizeConfig!=null ? Integer.parseInt(pageSizeConfig) : LDAPConstants.DEFAULT_BATCH_SIZE_FOR_SYNC;
+            boolean nextPage = true;
+            while (nextPage) {
+                userQuery.setLimit(pageSize);
+                final List<User> users = userQuery.getResultList();
+                nextPage = userQuery.getPaginationContext() != null;
+
+                KeycloakModelUtils.runJobInTransaction(sessionFactory, new KeycloakSessionTask() {
+
+                    @Override
+                    public void run(KeycloakSession session) {
+                        importPicketlinkUsers(session, realmId, fedModel, users, relationshipManager);
+                    }
+
+                });
+            }
+        } else {
+            // LDAP pagination not available. Do everything in single transaction
+            final List<User> users = userQuery.getResultList();
+            KeycloakModelUtils.runJobInTransaction(sessionFactory, new KeycloakSessionTask() {
+
+                @Override
+                public void run(KeycloakSession session) {
+                    importPicketlinkUsers(session, realmId, fedModel, users, relationshipManager);
                 }
 
             });
@@ -233,5 +306,40 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
         RealmModel realm = session.realms().getRealm(realmId);
         LDAPFederationProvider ldapFedProvider = getInstance(session, fedModel);
         ldapFedProvider.importPicketlinkRoles(realm, roles, fedModel);
+    }
+    
+    protected void syncRolesImpl(KeycloakSessionFactory sessionFactory, IdentityQuery<Role> roleQuery, final String realmId, final UserFederationProviderModel fedModel) {
+        boolean pagination = Boolean.parseBoolean(fedModel.getConfig().get(LDAPConstants.PAGINATION));
+
+        if (pagination) {
+            String pageSizeConfig = fedModel.getConfig().get(LDAPConstants.BATCH_SIZE_FOR_SYNC);
+            int pageSize = pageSizeConfig!=null ? Integer.parseInt(pageSizeConfig) : LDAPConstants.DEFAULT_BATCH_SIZE_FOR_SYNC;
+            boolean nextPage = true;
+            while (nextPage) {
+                roleQuery.setLimit(pageSize);
+                final List<Role> roles = roleQuery.getResultList();
+                nextPage = roleQuery.getPaginationContext() != null;
+
+                KeycloakModelUtils.runJobInTransaction(sessionFactory, new KeycloakSessionTask() {
+
+                    @Override
+                    public void run(KeycloakSession session) {
+                        importPicketlinkRoles(session, realmId, fedModel, roles);
+                    }
+
+                });
+            }
+        } else {
+            // LDAP pagination not available. Do everything in single transaction
+            final List<Role> roles = roleQuery.getResultList();
+            KeycloakModelUtils.runJobInTransaction(sessionFactory, new KeycloakSessionTask() {
+
+                @Override
+                public void run(KeycloakSession session) {
+                    importPicketlinkRoles(session, realmId, fedModel, roles);
+                }
+
+            });
+        }
     }
 }

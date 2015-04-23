@@ -470,9 +470,9 @@ module.controller('GenericUserFederationCtrl', function($scope, $location, Notif
 
     function triggerSync(action) {
         UserFederationSync.get({ action: action, realm: $scope.realm.realm, provider: $scope.instance.id }, function() {
-            Notifications.success("Sync of users finished successfully");
+            Notifications.success("Sync of users/roles finished successfully");
         }, function() {
-            Notifications.error("Error during sync of users");
+            Notifications.error("Error during sync of users/roles");
         });
     }
 });
@@ -680,9 +680,9 @@ module.controller('LDAPCtrl', function($scope, $location, Notifications, Dialog,
 
     function triggerSync(action) {
         UserFederationSync.get({ action: action, realm: $scope.realm.realm, provider: $scope.instance.id }, function() {
-            Notifications.success("Sync of users finished successfully");
+            Notifications.success("Sync of users/roles finished successfully");
         }, function() {
-            Notifications.error("Error during sync of users");
+            Notifications.error("Error during sync of users/roles");
         });
     }
 

@@ -56,11 +56,11 @@
                     <span tooltip-placement="right" tooltip="READ_ONLY is a read only LDAP store.  WRITABLE means data will be synced back to LDAP on demand.  UNSYNCED means user data will be imported, but not synced back to LDAP." class="fa fa-info-circle"></span>
                 </div>
                 <div class="form-group clearfix block">
-                    <label class="col-sm-2 control-label" for="syncRegistrations">Sync Registrations</label>
+                    <label class="col-sm-2 control-label" for="syncRegistrations">Sync To LDAP</label>
                     <div class="col-sm-4">
                         <input ng-model="syncRegistrations" name="syncRegistrations" id="syncRegistrations" onoffswitch />
                     </div>
-                    <span tooltip-placement="right" tooltip="Should newly created users be created within LDAP store?  Priority effects which provider is chose to sync the new user." class="fa fa-info-circle"></span>
+                    <span tooltip-placement="right" tooltip="Should newly created users/roles/role-mappings be created within LDAP store?  Priority effects which provider is chose to sync the new user/role/role-mapping." class="fa fa-info-circle"></span>
                 </div>
                 <div class="form-group clearfix">
                     <label class="col-sm-2 control-label" for="vendor">Vendor<span class="required">*</span></label>
@@ -245,8 +245,8 @@
                 <button kc-reset data-ng-show="changed">Clear changes</button>
                 <button kc-save  data-ng-show="changed">Save</button>
                 <button kc-delete data-ng-click="remove()" data-ng-hide="changed">Delete</button>
-                <button kc-delete data-ng-click="triggerFullSync()" data-ng-hide="changed">Synchronize all users</button>
-                <button kc-delete data-ng-click="triggerChangedUsersSync()" data-ng-hide="changed">Synchronize changed users</button>
+                <button kc-delete data-ng-click="triggerFullSync()" data-ng-hide="changed">Synchronize all users/roles</button>
+                <button kc-delete data-ng-click="triggerChangedUsersSync()" data-ng-hide="changed">Synchronize changed users/roles</button>
             </div>
         </form>
     </div>

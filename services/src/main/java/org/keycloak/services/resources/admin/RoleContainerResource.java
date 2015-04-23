@@ -96,8 +96,7 @@ public class RoleContainerResource extends RoleResource {
             		
             		UserFederationProvider fed = factory.getInstance(session, federation);
             		if (fed.synchronizeRegistrations()) {
-            			//TODO: implement role.setFederationLink.
-//                    	role.setFederationLink(federation.getId());
+                    	role.setFederationLink(federation.getId());
             			fed.createRole(realm, role);
             		}
             	}
