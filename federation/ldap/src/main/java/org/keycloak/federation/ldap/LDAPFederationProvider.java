@@ -418,6 +418,7 @@ public class LDAPFederationProvider implements UserFederationProvider {
         }
 
         RoleModel imported = realm.addRole(picketlinkRole.getName());
+        imported.setFederationLink(model.getId());
         imported.setAttribute(LDAP_ID, picketlinkRole.getId());
         return proxy(imported);
     }
