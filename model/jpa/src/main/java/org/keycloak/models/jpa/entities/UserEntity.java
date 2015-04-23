@@ -16,6 +16,7 @@ import java.util.Collection;
 
 /**
  * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
+ * @author <a href="mailto:jli@vizuri.com">Jiehuan Li</a>
  * @version $Revision: 1 $
  */
 @NamedQueries({
@@ -112,7 +113,8 @@ public class UserEntity {
 
     public void setEmail(String email) {
         this.email = email;
-        this.emailConstraint = email != null ? email : KeycloakModelUtils.generateId();
+        // Relax the contraint on unique email address within realm by commenting out the following line -- Jiehuan Li
+//        this.emailConstraint = email != null ? email : KeycloakModelUtils.generateId();
     }
 
     public boolean isEnabled() {

@@ -3,6 +3,7 @@ package org.keycloak.models.mongo.keycloak.adapters;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
 import com.mongodb.QueryBuilder;
+
 import org.keycloak.connections.mongo.api.MongoStore;
 import org.keycloak.connections.mongo.api.context.MongoStoreInvocationContext;
 import org.keycloak.models.ApplicationModel;
@@ -15,6 +16,7 @@ import org.keycloak.models.UserFederationProviderModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.UserProvider;
 import org.keycloak.models.entities.SocialLinkEntity;
+import org.keycloak.models.mongo.keycloak.entities.MongoRoleEntity;
 import org.keycloak.models.mongo.keycloak.entities.MongoUserEntity;
 import org.keycloak.models.utils.CredentialValidation;
 
@@ -352,6 +354,12 @@ public class MongoUserProvider implements UserProvider {
                 .and("federationLink").is(link.getId())
                 .get();
         getMongoStore().removeEntities(MongoUserEntity.class, query, invocationContext);
+        
+        query = new QueryBuilder()
+        .and("realmId").is(realm.getId())
+        .and("federationLink").is(link.getId())
+        .get();
+        getMongoStore().removeEntities(MongoRoleEntity.class, query, invocationContext);
 
     }
 

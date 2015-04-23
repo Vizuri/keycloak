@@ -159,6 +159,14 @@ public class JpaUserProvider implements UserProvider {
                 .setParameter("realmId", realm.getId())
                 .setParameter("link", link.getId())
                 .executeUpdate();
+        num = em.createNamedQuery("deleteRoleAttributesByRealmAndLink")
+                .setParameter("realmId", realm.getId())
+                .setParameter("link", link.getId())
+                .executeUpdate();
+        num = em.createNamedQuery("deleteRolesByRealmAndLink")
+                .setParameter("realmId", realm.getId())
+                .setParameter("link", link.getId())
+                .executeUpdate();
     }
 
     @Override

@@ -72,6 +72,8 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
     public void syncAllUsers(KeycloakSessionFactory sessionFactory, String realmId, UserFederationProviderModel model) {
         logger.infof("Sync all users from LDAP to local store: realm: %s, federation provider: %s, current time: " + new Date(), realmId, model.getDisplayName());
 
+        logger.info("syncAllUsers started.");
+        
         PartitionManagerProvider idmProvider = sessionFactory.create().getProvider(PartitionManagerProvider.class);
         PartitionManager partitionMgr = idmProvider.getPartitionManager(model);
         IdentityManager idm = partitionMgr.createIdentityManager();
@@ -87,6 +89,8 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
         }
         
         // TODO: Remove all existing keycloak users, which have federation links, but are not in LDAP. Perhaps don't check users, which were just added or updated during this sync?
+    
+        logger.info("syncAllUsers finished.");
     }
 
     @Override
