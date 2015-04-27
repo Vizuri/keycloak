@@ -221,18 +221,18 @@
                     <span tooltip-placement="right" tooltip="Period for full synchronization in seconds" class="fa fa-info-circle"></span>
                 </div>
                 <div class="form-group clearfix">
-                    <label class="col-sm-2 control-label" for="changedSyncEnabled">Periodic changed users sync</label>
+                    <label class="col-sm-2 control-label" for="changedSyncEnabled">Periodic changed users/roles sync</label>
                     <div class="col-sm-4">
                         <input ng-model="changedSyncEnabled" name="changedSyncEnabled" id="changedSyncEnabled" onoffswitch />
                     </div>
-                    <span tooltip-placement="right" tooltip="Does periodic synchronization of changed or newly created LDAP users to Keycloak should be enabled or not" class="fa fa-info-circle"></span>
+                    <span tooltip-placement="right" tooltip="Does periodic synchronization of changed or newly created LDAP users/roles to Keycloak should be enabled or not" class="fa fa-info-circle"></span>
                 </div>
                 <div class="form-group clearfix" data-ng-show="changedSyncEnabled">
-                    <label class="col-sm-2 control-label" for="changedSyncPeriod">Changed users sync period</label>
+                    <label class="col-sm-2 control-label" for="changedSyncPeriod">Changed users/roles sync period</label>
                     <div class="col-sm-4">
                         <input class="form-control" type="number" ng-model="instance.changedSyncPeriod" id="changedSyncPeriod" />
                     </div>
-                    <span tooltip-placement="right" tooltip="Period for synchronization of changed or newly created LDAP users in seconds" class="fa fa-info-circle"></span>
+                    <span tooltip-placement="right" tooltip="Period for synchronization of changed or newly created LDAP users/roles in seconds" class="fa fa-info-circle"></span>
                 </div>
             </fieldset>
 
