@@ -210,4 +210,27 @@ public class LDAPUtils {
     private static RelationshipManager getRelationshipManager(PartitionManager partitionManager) {
         return partitionManager.createRelationshipManager();
     }
+    
+    public static Role getRole(PartitionManager partitionManager, String roleName) {
+        IdentityManager idmManager = getIdentityManager(partitionManager);
+        return BasicModel.getRole(idmManager, roleName);
+    }
+    
+    public static boolean hasRole(PartitionManager partitionManager, String username, String rolename) {
+        IdentityManager identityManager = getIdentityManager(partitionManager);
+        
+        Role picketlinkRole = BasicModel.getRole(identityManager, rolename);
+        if (picketlinkRole == null) {
+            throw new IdentityManagementException("Role not found");
+        }
+        
+        User picketlinkUser = BasicModel.getUser(identityManager, username);
+        if (picketlinkUser == null) {
+            throw new IdentityManagementException("User not found");
+        }
+        
+        RelationshipManager relationshipManager = getRelationshipManager(partitionManager);
+        
+        return BasicModel.hasRole(relationshipManager, picketlinkUser, picketlinkRole);
+    }
 }

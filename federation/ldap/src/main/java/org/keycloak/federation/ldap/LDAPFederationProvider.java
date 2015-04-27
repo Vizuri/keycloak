@@ -206,7 +206,72 @@ public class LDAPFederationProvider implements UserFederationProvider {
             if (picketlinkUser == null) {
                 return false;
             }
+            
+            // only deal with realm roles for now.
+            // should run in a transaction
+            try {
+            	Set<RoleModel> roles = local.getRealmRoleMappings();
+            	String federationLink = this.getModel().getId();
+            	for (RoleModel role : roles) {
+            		if (federationLink.equals(role.getFederationLink()) && !isValid(local, role)) {
+            			local.deleteRoleMapping(role);
+            		}
+            	}
+            } catch (Exception e) {
+            	logger.error("Exception occurred when trying to sync role mapping(s) from LDAP for user " + local.getUsername() + ": " + e);
+            }
+            
             return picketlinkUser.getId().equals(local.getAttribute(LDAP_ID));
+        } catch (IdentityManagementException ie) {
+            throw convertIDMException(ie);
+        }
+    }
+    
+    @Override
+    public boolean isValid(RoleModel role) {
+        try {
+            Role picketlinkRole = LDAPUtils.getRole(partitionManager, role.getName());
+            if (picketlinkRole == null) {
+                return false;
+            }
+            boolean valid = picketlinkRole.getId().equals(role.getAttribute(LDAP_ID));
+            
+            if (!valid) {
+            	// role may have been removed from LDAP and then added back causing roleName to be the same but LDAP_ID to be different
+            	// delete this role from keycloak
+            	// then import the new role with the same name into keycloak
+            	// then add all role mapping(s) for the newly imported role
+            	// TODO:
+            }
+            
+            return valid;
+        } catch (IdentityManagementException ie) {
+            throw convertIDMException(ie);
+        }
+    }
+    
+    @Override
+    public boolean isValid(UserModel user, RoleModel role) {
+        try {
+        	String username = user.getUsername();
+        	User picketlinkUser = LDAPUtils.getUser(partitionManager, username);
+            if (picketlinkUser == null) {
+                return false;
+            }
+            
+            String roleName = role.getName();
+            Role picketlinkRole = LDAPUtils.getRole(partitionManager, roleName);
+            if (picketlinkRole == null) {
+                return false;
+            }
+            
+            if (picketlinkUser.getId().equals(user.getAttribute(LDAP_ID)) && picketlinkRole.getId().equals(role.getAttribute(LDAP_ID))) {
+            	return LDAPUtils.hasRole(partitionManager, username, roleName);
+            } else {
+            	// user and/or role may have been removed from LDAP and then added back causing username/roleName to be the same but LDAP_ID to be different
+            	// TODO:
+            	return false;
+            }
         } catch (IdentityManagementException ie) {
             throw convertIDMException(ie);
         }
@@ -400,6 +465,41 @@ public class LDAPFederationProvider implements UserFederationProvider {
             }
         }
     }
+	
+	protected void importPicketlinkRoles(RealmModel realm, List<Role> roles, UserFederationProviderModel fedModel, RelationshipManager relationshipManager) {
+        for (Role picketlinkRole : roles) {
+            String roleName = picketlinkRole.getName();
+            RoleModel currentRole = null;
+            currentRole = getRole(realm, roleName);
+            
+            if (currentRole == null) {
+            	logger.error("LDAP roles should have been imported into keycloak by now, however failed to find in keycloak the role with name: " + picketlinkRole.getName());
+            }
+            
+            // Grant this role to all users based on LDAP group membership information.
+            RelationshipQuery<Grant> grantQuery = relationshipManager.createRelationshipQuery(Grant.class);            
+            grantQuery.setParameter(Grant.ROLE, picketlinkRole);
+            List<Grant> grants = grantQuery.getResultList();
+            
+            for (Grant grant : grants) {
+            	User picketlinkUser = (User)grant.getAssignee();
+            	
+            	if (picketlinkUser.getLoginName() == null) {
+                    logger.error("User returned from LDAP has null username! Check configuration of your LDAP mappings. ID of user from LDAP: " + picketlinkUser.getId());
+                    continue;
+                }
+            	
+                UserModel currentUser = session.userStorage().getUserByUsername(picketlinkUser.getLoginName(), realm);
+                
+                if (currentUser != null && !currentUser.hasRole(currentRole)) {
+                	currentUser.grantRole(currentRole);
+                } else {
+                	logger.error("LDAP users should have been imported into keycloak by now, however failed to find in keycloak the user with username: " + picketlinkUser.getLoginName());
+                }
+            }
+            
+        }
+    }
 
 	private RoleModel getRole(RealmModel realm, String rolename) {
 		Set<RoleModel> allRoles = realm.getRoles();
@@ -423,23 +523,23 @@ public class LDAPFederationProvider implements UserFederationProvider {
         return proxy(imported);
     }
     
-    public RoleModel proxy(RoleModel local) {
+    public RoleModel proxy(RoleModel role) {
         switch (editMode) {
             case READ_ONLY:
-               return new ReadonlyLDAPRoleModelDelegate(local, this);
+               return new ReadonlyLDAPRoleModelDelegate(role, this);
             case WRITABLE:
-               return new WritableLDAPRoleModelDelegate(local, this);
+               return new WritableLDAPRoleModelDelegate(role, this);
             case UNSYNCED:
-               return new UnsyncedLDAPRoleModelDelegate(local, this);
+               return new UnsyncedLDAPRoleModelDelegate(role, this);
         }
-       return local;
+       return role;
    }
     
     protected void importPicketlinkUsers(RealmModel realm, List<User> users, UserFederationProviderModel fedModel, RelationshipManager relationshipManager) {
         for (User picketlinkUser : users) {
             UserModel currentUser = importPicketlinkUser(realm, picketlinkUser, fedModel);
             
-            // Grant roles to this user based on ldap member or memberof information.
+            // Grant roles to this user based on LDAP group membership information.
             RelationshipQuery<Grant> grantQuery = relationshipManager.createRelationshipQuery(Grant.class);            
             grantQuery.setParameter(Grant.ASSIGNEE, picketlinkUser);
             List<Grant> grants = grantQuery.getResultList();
@@ -492,6 +592,6 @@ public class LDAPFederationProvider implements UserFederationProvider {
     
     @Override
     public boolean supportRoles() {
-        return "true".equalsIgnoreCase(model.getConfig().get(LDAPConstants.SUPPORT_ROLES));
+        return model.supportRoles();
     }
 }

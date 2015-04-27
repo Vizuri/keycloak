@@ -149,6 +149,8 @@ public interface UserFederationProvider extends Provider {
 	boolean removeRole(RealmModel realm, RoleModel role);
 	void grantRole(RealmModel realm, UserModel user, RoleModel role);
 	void revokeRole(RealmModel realm, UserModel user, RoleModel role);
-	RoleModel proxy(RoleModel local);
+	RoleModel proxy(RoleModel role);
+	boolean isValid(RoleModel role);
+	boolean isValid(UserModel user, RoleModel role);
 
 }

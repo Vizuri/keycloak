@@ -5,6 +5,7 @@ import org.jboss.resteasy.annotations.cache.NoCache;
 import org.jboss.resteasy.spi.NotFoundException;
 import org.keycloak.models.ApplicationModel;
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.ModelException;
 import org.keycloak.models.OAuthClientModel;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleModel;
@@ -102,24 +103,35 @@ public class RoleByIdResource extends RoleResource {
         	if (role == null) {
         		throw new NotFoundException("Could not find role with id: " + id);
         	}
+        	String federationLink = role.getFederationLink();
         	deleteRole(role);
 
-        	try {
+        	if (federationLink != null) {
+        		try {
 
-        		for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
-        			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+        			for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
+        				if (federation.getId().equals(federationLink)) {
+        					UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
 
-        			UserFederationProvider fed = factory.getInstance(session, federation);
-        			if (fed.synchronizeRegistrations()) {
-        				fed.removeRole(realm, role);
+        					UserFederationProvider fed = factory.getInstance(session, federation);
+        					if (fed.synchronizeRegistrations()) {
+        						boolean done = fed.removeRole(realm, role);
+        						if (!done) {
+        							logger.warn("Failed to remove role " + role.getName() + " from federation.  This role may no longer exist in federated store.");
+        						}
+        					}
+        					break;
+        				}
         			}
-        		}
 
-        		if (session.getTransaction().isActive()) {
-        			session.getTransaction().commit();
+        			if (session.getTransaction().isActive()) {
+        				session.getTransaction().commit();
+        			}
+        		} catch (IllegalStateException ise) {
+        			logger.warn("Failed to remove role " + role.getName() + " from federation.  Ignore the exception because either federation is read-only or syncing to federation is turned off in configuration.  Keycloak roles could get out of sync with groups in federated store though. " + ise);
+        		} catch (ModelException me) {
+        			logger.warn("Failed to remove role " + role.getName() + " from federation.  Ignore the exception because this role may no longer exist in federated store. " + me);
         		}
-        	} catch (IllegalStateException ise) {
-        		logger.warn("Ignore the exception because either user federation is read-only or syncing to user federation is turned off in configuration.  Keycloak roles could get out of sync with LDAP groups though. " + ise);
         	}
         } catch(Exception e) {
         	logger.error("Failed to delete role with id " + id + ": " + e);

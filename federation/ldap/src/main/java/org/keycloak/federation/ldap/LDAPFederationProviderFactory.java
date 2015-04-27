@@ -114,11 +114,11 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
     		IdentityQuery<Role> roleQuery = queryBuilder.createIdentityQuery(Role.class).where(condition);
     		syncRolesImpl(sessionFactory, roleQuery, realmId, model);
 
-    		// Sync updated roles
-    		queryBuilder = identityManager.getQueryBuilder();
-    		condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
-    		roleQuery = queryBuilder.createIdentityQuery(Role.class).where(condition);
-    		syncRolesImpl(sessionFactory, roleQuery, realmId, model);
+    		// Sync updated roles, moved to last to pick up membership change that may or may not involve newly created LDAP users.
+//    		queryBuilder = identityManager.getQueryBuilder();
+//    		condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
+//    		roleQuery = queryBuilder.createIdentityQuery(Role.class).where(condition);
+//    		syncRolesImpl(sessionFactory, roleQuery, realmId, model);
 
     		RelationshipManager rm = partitionMgr.createRelationshipManager();
     		
@@ -133,6 +133,12 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
     		condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
     		userQuery = queryBuilder.createIdentityQuery(User.class).where(condition);
     		syncImpl(sessionFactory, userQuery, rm, realmId, model);
+    		
+    		// Sync updated roles to pick up latest membership changes
+    		queryBuilder = identityManager.getQueryBuilder();
+    		condition = queryBuilder.greaterThanOrEqualTo(LDAPUtils.MODIFY_DATE, lastSync);
+    		roleQuery = queryBuilder.createIdentityQuery(Role.class).where(condition);
+    		syncRolesImpl(sessionFactory, roleQuery, rm, realmId, model);
 
     	} else {
     		// Sync newly created users
@@ -308,6 +314,12 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
         ldapFedProvider.importPicketlinkRoles(realm, roles, fedModel);
     }
     
+    protected void importPicketlinkRoles(KeycloakSession session, String realmId, UserFederationProviderModel fedModel, List<Role> roles, RelationshipManager relationshipManager) {
+        RealmModel realm = session.realms().getRealm(realmId);
+        LDAPFederationProvider ldapFedProvider = getInstance(session, fedModel);
+        ldapFedProvider.importPicketlinkRoles(realm, roles, fedModel, relationshipManager);
+    }
+    
     protected void syncRolesImpl(KeycloakSessionFactory sessionFactory, IdentityQuery<Role> roleQuery, final String realmId, final UserFederationProviderModel fedModel) {
         boolean pagination = Boolean.parseBoolean(fedModel.getConfig().get(LDAPConstants.PAGINATION));
 
@@ -337,6 +349,41 @@ public class LDAPFederationProviderFactory implements UserFederationProviderFact
                 @Override
                 public void run(KeycloakSession session) {
                     importPicketlinkRoles(session, realmId, fedModel, roles);
+                }
+
+            });
+        }
+    }
+    
+    protected void syncRolesImpl(KeycloakSessionFactory sessionFactory, IdentityQuery<Role> roleQuery, final RelationshipManager relationshipManager, final String realmId, final UserFederationProviderModel fedModel) {
+        boolean pagination = Boolean.parseBoolean(fedModel.getConfig().get(LDAPConstants.PAGINATION));
+
+        if (pagination) {
+            String pageSizeConfig = fedModel.getConfig().get(LDAPConstants.BATCH_SIZE_FOR_SYNC);
+            int pageSize = pageSizeConfig!=null ? Integer.parseInt(pageSizeConfig) : LDAPConstants.DEFAULT_BATCH_SIZE_FOR_SYNC;
+            boolean nextPage = true;
+            while (nextPage) {
+                roleQuery.setLimit(pageSize);
+                final List<Role> roles = roleQuery.getResultList();
+                nextPage = roleQuery.getPaginationContext() != null;
+
+                KeycloakModelUtils.runJobInTransaction(sessionFactory, new KeycloakSessionTask() {
+
+                    @Override
+                    public void run(KeycloakSession session) {
+                        importPicketlinkRoles(session, realmId, fedModel, roles, relationshipManager);
+                    }
+
+                });
+            }
+        } else {
+            // LDAP pagination not available. Do everything in single transaction
+            final List<Role> roles = roleQuery.getResultList();
+            KeycloakModelUtils.runJobInTransaction(sessionFactory, new KeycloakSessionTask() {
+
+                @Override
+                public void run(KeycloakSession session) {
+                    importPicketlinkRoles(session, realmId, fedModel, roles, relationshipManager);
                 }
 
             });

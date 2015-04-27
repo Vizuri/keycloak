@@ -6,6 +6,7 @@ import org.jboss.resteasy.spi.NotFoundException;
 import org.keycloak.models.ApplicationModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ModelDuplicateException;
+import org.keycloak.models.ModelException;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.RoleContainerModel;
 import org.keycloak.models.RoleModel;
@@ -67,7 +68,24 @@ public class RoleContainerResource extends RoleResource {
         Set<RoleModel> roleModels = roleContainer.getRoles();
         List<RoleRepresentation> roles = new ArrayList<RoleRepresentation>();
         for (RoleModel roleModel : roleModels) {
-            roles.add(ModelToRepresentation.toRepresentation(roleModel));
+        	String federationLink = roleModel.getFederationLink();
+        	if ( federationLink == null)
+        		roles.add(ModelToRepresentation.toRepresentation(roleModel));
+        	else {
+        		for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
+            		if (federation.getId().equals(federationLink)) {
+            			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+
+            			UserFederationProvider fed = factory.getInstance(session, federation);
+            			if (fed.isValid(roleModel)) {
+            				roles.add(ModelToRepresentation.toRepresentation(roleModel));
+            			} else {
+            				deleteRole(roleModel);
+            			}
+            			break;
+            		}
+            	}
+        	}
         }
         return roles;
     }
@@ -92,25 +110,28 @@ public class RoleContainerResource extends RoleResource {
             try {
             
             	for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
-            		UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
-            		
-            		UserFederationProvider fed = factory.getInstance(session, federation);
-            		if (fed.synchronizeRegistrations()) {
-                    	role.setFederationLink(federation.getId());
-            			fed.createRole(realm, role);
+            		if (federation.supportRoles()) {
+            			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+
+            			UserFederationProvider fed = factory.getInstance(session, federation);
+            			if (fed.synchronizeRegistrations()) {
+            				fed.createRole(realm, role);
+            				role.setFederationLink(federation.getId());
+            				break;
+            			}
             		}
             	}
             	
             	if (session.getTransaction().isActive()) {
             		session.getTransaction().commit();
                 }
-            }catch (ModelDuplicateException mde) {
+            } catch (ModelDuplicateException mde) {
             	if (session.getTransaction().isActive()) {
                     session.getTransaction().setRollbackOnly();
                 }
-            	return Flows.errors().exists("Role with name " + rep.getName() + " already exists in user federation");
+            	return Flows.errors().exists("Role with name " + rep.getName() + " already exists in federated store.");
         	} catch (IllegalStateException ise) {
-        		logger.warn("Ignore the exception because either user federation is read-only or syncing to user federation is turned off in configuration.  Keycloak roles could get out of sync with LDAP groups though. " + ise);
+        		logger.warn("Failed to create role " + role.getName() + " in federated store.  Ignore the exception because either federation is read-only or syncing to federation is turned off in configuration.  Keycloak roles could get out of sync with groups in federated store though. " + ise);
         	}
 
             return Response.created(uriInfo.getAbsolutePathBuilder().path(role.getName()).build()).build();
@@ -118,7 +139,7 @@ public class RoleContainerResource extends RoleResource {
         	if (session.getTransaction().isActive()) {
                 session.getTransaction().setRollbackOnly();
             }
-            return Flows.errors().exists("Role with name " + rep.getName() + " already exists in keycloak");
+            return Flows.errors().exists("Role with name " + rep.getName() + " already exists in keycloak.");
         } catch (Exception e) {
         	if (session.getTransaction().isActive()) {
                 session.getTransaction().setRollbackOnly();
@@ -163,30 +184,41 @@ public class RoleContainerResource extends RoleResource {
         	if (role == null) {
         		throw new NotFoundException("Could not find role: " + roleName);
         	}
+        	String federationLink = role.getFederationLink();
         	deleteRole(role);
 
-        	try {
+        	if (federationLink != null) {
+        		try {
 
-        		for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
-        			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+        			for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
+        				if (federation.getId().equals(federationLink)) {
+        					UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
 
-        			UserFederationProvider fed = factory.getInstance(session, federation);
-        			if (fed.synchronizeRegistrations()) {
-        				fed.removeRole(realm, role);
+        					UserFederationProvider fed = factory.getInstance(session, federation);
+        					if (fed.synchronizeRegistrations()) {
+        						boolean done = fed.removeRole(realm, role);
+        						if (!done) {
+        							logger.warn("Failed to remove role " + role.getName() + " from federation.  This role may no longer exist in federated store.");
+        						}
+        					}
+        					break;
+        				}
         			}
-        		}
 
-        		if (session.getTransaction().isActive()) {
-        			session.getTransaction().commit();
+        			if (session.getTransaction().isActive()) {
+        				session.getTransaction().commit();
+        			}
+        		} catch (IllegalStateException ise) {
+        			logger.warn("Failed to remove role " + role.getName() + " from federation.  Ignore the exception because either user federation is read-only or syncing to user federation is turned off in configuration.  Keycloak roles could get out of sync with groups in federated store though. " + ise);
+        		} catch (ModelException me) {
+        			logger.warn("Failed to remove role " + role.getName() + " from federation.  Ignore the exception because this role may no longer exist in federated store. " + me);
         		}
-        	} catch (IllegalStateException ise) {
-        		logger.warn("Ignore the exception because either user federation is read-only or syncing to user federation is turned off in configuration.  Keycloak roles could get out of sync with LDAP groups though. " + ise);
         	}
         } catch(Exception e) {
+        	logger.error("Failed to delete role " + roleName + ": " + e);
         	if (session.getTransaction().isActive()) {
         		session.getTransaction().setRollbackOnly();
         	}
-        	logger.error("Failed to delete role " + roleName + ": " + e);
         }
     }
 

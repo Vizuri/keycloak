@@ -469,11 +469,52 @@ public class UsersResource {
         if (user == null) {
             throw new NotFoundException("User not found");
         }
+        
+        String userFederationLink = user.getFederationLink();
 
         Set<RoleModel> realmMappings = user.getRealmRoleMappings();
         List<RoleRepresentation> realmMappingsRep = new ArrayList<RoleRepresentation>();
         for (RoleModel roleModel : realmMappings) {
-            realmMappingsRep.add(ModelToRepresentation.toRepresentation(roleModel));
+        	String roleFederationLink = roleModel.getFederationLink();
+        	if (userFederationLink == null || roleFederationLink == null || userFederationLink != roleFederationLink) {
+        		if (roleFederationLink == null) {
+        			realmMappingsRep.add(ModelToRepresentation.toRepresentation(roleModel));
+        		} else {
+        			for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
+                		if (federation.getId().equals(roleFederationLink)) {
+                			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+
+                			UserFederationProvider fed = factory.getInstance(session, federation);
+                			if (fed.isValid(roleModel)) {
+                				realmMappingsRep.add(ModelToRepresentation.toRepresentation(roleModel));
+                			} else {
+                				user.deleteRoleMapping(roleModel);
+                				// TODO:
+                				// deleteRole(roleModel);
+                			}
+                			break;
+                		}
+                	}
+        		}
+        	} else {
+        		for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
+            		if (federation.getId().equals(roleFederationLink)) {
+            			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+
+            			UserFederationProvider fed = factory.getInstance(session, federation);
+            			if (fed.isValid(user, roleModel)) {
+            				realmMappingsRep.add(ModelToRepresentation.toRepresentation(roleModel));
+            			} else {
+            				user.deleteRoleMapping(roleModel);
+            				if (!fed.isValid(roleModel)) {
+            					// TODO:
+            					// deleteRole(roleModel);
+            				}
+            			}
+            			break;
+            		}
+            	}
+        	}
         }
         return realmMappingsRep;
     }
@@ -558,18 +599,22 @@ public class UsersResource {
 
         	try {
         		for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
-        			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
-    		
-        			UserFederationProvider fed = factory.getInstance(session, federation);
-        			for (RoleRepresentation role : roles) {
-        				RoleModel roleModel = realm.getRole(role.getName());
-        				if (fed.synchronizeRegistrations()) {
-        					fed.grantRole(realm, user, roleModel);
+        			String federationLink = federation.getId();
+        			if (federation.supportRoles() && federationLink.equals(user.getFederationLink())) {
+        				UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+
+        				UserFederationProvider fed = factory.getInstance(session, federation);
+        				for (RoleRepresentation role : roles) {
+        					RoleModel roleModel = realm.getRole(role.getName());
+        					if (federationLink.equals(roleModel.getFederationLink()) && fed.synchronizeRegistrations()) {
+        						fed.grantRole(realm, user, roleModel);
+        					}
         				}
+        				break;
         			}
         		}
         	} catch (IllegalStateException ise) {
-        		logger.warn("Ignore the exception because either user federation is read-only or syncing to user federation is turned off in configuration.  Keycloak role mapping could get out of sync with LDAP group/user mapping though. " + ise);
+        		logger.warn("Failed to add role mapping(s) to federation.  Ignore the exception because either federation is read-only or syncing to federation is turned off in configuration.  Keycloak role mapping(s) could get out of sync with group membership data in federated store though. " + ise);
         	}
         	if (session.getTransaction().isActive()) {
         		session.getTransaction().commit();
@@ -626,12 +671,17 @@ public class UsersResource {
         	
         	try {
         		for (UserFederationProviderModel federation : realm.getUserFederationProviders()) {
-        			UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
-    		
-        			UserFederationProvider fed = factory.getInstance(session, federation);
-        			
-        			for (RoleModel role : deleted) {
-        				fed.revokeRole(realm, user, role);
+        			String federationLink = federation.getId();
+        			if (federationLink.equals(user.getFederationLink())) {
+        				UserFederationProviderFactory factory = (UserFederationProviderFactory)session.getKeycloakSessionFactory().getProviderFactory(UserFederationProvider.class, federation.getProviderName());
+
+        				UserFederationProvider fed = factory.getInstance(session, federation);
+
+        				for (RoleModel role : deleted) {
+        					if (federationLink.equals(role.getFederationLink()))
+        						fed.revokeRole(realm, user, role);
+        				}
+        				break;
         			}
         		}
         	} catch (IllegalStateException ise) {

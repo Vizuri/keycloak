@@ -173,4 +173,8 @@ public abstract class BasePropertiesFederationProvider implements UserFederation
     public void revokeRole(RealmModel realm, UserModel user, RoleModel role) {}
     @Override
     public RoleModel proxy(RoleModel local) {return null;}
+    @Override
+	public boolean isValid(RoleModel role) {return false;}
+    @Override
+	public boolean isValid(UserModel user, RoleModel role) {return false;}
 }

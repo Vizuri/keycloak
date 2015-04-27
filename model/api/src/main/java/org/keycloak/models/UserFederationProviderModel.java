@@ -94,4 +94,8 @@ public class UserFederationProviderModel {
     public void setLastSync(int lastSync) {
         this.lastSync = lastSync;
     }
+    
+    public boolean supportRoles() {
+        return "true".equalsIgnoreCase(getConfig().get(LDAPConstants.SUPPORT_ROLES));
+    }
 }
